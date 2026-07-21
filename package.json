@@ -1,0 +1,42 @@
+{
+  "name": "@holepunchto/keet-nearby",
+  "version": "0.0.1",
+  "description": "advertise & find nearby peers",
+  "main": "index.js",
+  "exports": {
+    "./package": "./package.json",
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "package.json",
+    "index.js",
+    "index.d.ts"
+  ],
+  "devDependencies": {
+    "brittle": "^3.19.1",
+    "lunte": "^1.8.4",
+    "prettier": "^3.9.5",
+    "prettier-config-holepunch": "^2.0.0"
+  },
+  "scripts": {
+    "format": "prettier . --write",
+    "test": "brittle-bare test/index.js",
+    "lint": "prettier . --check && lunte"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/holepunchto/repo-template.git"
+  },
+  "author": "Holepunch Inc",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/holepunchto/repo-template/issues"
+  },
+  "homepage": "https://github.com/holepunchto/repo-template",
+  "dependencies": {
+    "bare-bluetooth": "../bare-bluetooth/"
+  }
+}
