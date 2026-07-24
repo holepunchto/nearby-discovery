@@ -1,4 +1,4 @@
-const { Central, Characteristic, Server } = require('bare-bluetooth')
+const { Central, Characteristic, Server, Service } = require('bare-bluetooth')
 const EventEmitter = require('bare-events')
 
 const SERVICE_UUID = 'B4A3C8A7-0000-1000-8000-00805F9B34FB'
@@ -104,9 +104,12 @@ module.exports = class NearbyPeers extends EventEmitter {
 
     console.log('discovered:', peripheral.id, peripheral.name, peripheral.rssi)
 
-    if (!peer.key && !peer.ignore && !this._peripheral /* TODO: proper connect queue */) {
-      this._connect(peripheral.id)
-    }
+    if (!this.scanning) return // TODO: bluez cache bug
+    if (peer.key) return
+    if (peer.ignore) return
+    if (this._peripheral) return  // TODO: proper connect queue
+
+    this._connect(peripheral.id)
   }
 
   _connect(id) {
