@@ -11,7 +11,6 @@ async function main() {
   await service.announce(key)
   console.log('listening')
 
-  /*
   // scan client
   service.on('discovered', peer => {
     console.log('peer resolved', peer)
@@ -20,7 +19,6 @@ async function main() {
   service.on('error', console.error)
   service.scan()
   console.log('scanning')
-  */
 }
 
 main()
