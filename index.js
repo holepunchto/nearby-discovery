@@ -10,6 +10,8 @@ const scanOptions = isAndroid ? { scanMode: Central.SCAN_MODE_LOW_LATENCY } : un
 module.exports = class NearbyPeers extends EventEmitter {
   constructor({ serviceUUID = SERVICE_UUID, charUUID = CHAR_UUID } = {}) {
     super()
+    this._localKey = null
+    this._localName = null
     this.serviceUUID = serviceUUID
     this.charUUID = charUUID
 
@@ -33,7 +35,9 @@ module.exports = class NearbyPeers extends EventEmitter {
     this.server = new Server()
     this.idchr = new Characteristic(this.charUUID, { read: true }) // BLE-ish for "port".
 
-    this.server.on('stateChange', (blestate) => {})
+    this.server.on('stateChange', (blestate) => {
+      console.log('server state', blestate, this.server.state)
+    })
     this.server.on('readRequest', this._onreadrequest.bind(this))
 
     const done = new Promise((resolve, reject) => {
@@ -51,9 +55,16 @@ module.exports = class NearbyPeers extends EventEmitter {
     await done
 
     this.server.on('error', this.emit.bind(this, 'error'))
+
+    this.server.updateValue(this.idchr, this._localKey)
+    this.server.startAdvertising({
+      serviceUUIDs: [this.serviceUUID],
+      name: this._localName
+    })
   }
 
-  async announce(id) {
+  async announce(id, { deviceName = 'keet-nearby' } = {}) {
+    this._localName = deviceName
     this._localKey = id // TODO: normalize
     if (this.announcing) return
 
