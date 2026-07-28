@@ -1,7 +1,7 @@
 {
   "name": "@holepunchto/keet-nearby",
   "version": "0.0.1",
-  "description": "advertise & find nearby peers",
+  "description": "dials nearby peers over BLE",
   "main": "index.js",
   "exports": {
     "./package": "./package.json",

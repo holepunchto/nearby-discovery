@@ -109,11 +109,13 @@ module.exports = class NearbyPeers extends EventEmitter {
 
   _oncentraldiscover(discoveredPeripheral) {
     const peripheral = discoveredPeripheral // todo
+
     const peer = {
       ...(this.discovered.get(peripheral.id) || spawnPeer()),
 
       // update radio props
       peripheral,
+      address: peripheral.id,
       rssi: peripheral.rssi,
       deviceName: peripheral.name
     }
@@ -261,6 +263,10 @@ module.exports = class NearbyPeers extends EventEmitter {
     // TODO: destroy open peripherals?
     this.central.destroy()
   }
+
+  [Symbol.dispose]() {
+    this.destroy()
+  }
 }
 
 function normalizeUUID(uuid) {
@@ -277,6 +283,7 @@ function spawnPeer() {
   return {
     key: null,
     rssi: null,
+    address: null,
     deviceName: null,
     ignore: false,
     attempts: 0,
