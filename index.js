@@ -29,6 +29,8 @@ module.exports = class NearbyPeers extends EventEmitter {
     this.server = null
     this.idchr = null
     this.localService = null
+
+    this._oncentralconnecterror = this._oncentralconnecterror.bind(this)
   }
 
   async _initServer() {
@@ -93,8 +95,16 @@ module.exports = class NearbyPeers extends EventEmitter {
     console.log('starting scan')
     this._resumeScan()
   }
+
   _resumeScan() {
     this.central.startScan([this.serviceUUID], scanOptions)
+    this._scanning = true
+  }
+
+  _pauseScan() {
+    if (!this._scanning) return
+    this._scanning = false
+    this.central.stopScan()
   }
 
   _oncentraldiscover(discoveredPeripheral) {
@@ -124,8 +134,7 @@ module.exports = class NearbyPeers extends EventEmitter {
   }
 
   _connect(id) {
-    // TODO: pause/resume scan
-    this.central.stopScan()
+    this._pauseScan()
 
     const peer = this.discovered.get(id)
     const { peripheral } = peer
@@ -135,11 +144,18 @@ module.exports = class NearbyPeers extends EventEmitter {
     peer.attempts++
     console.log('connect:', peripheral.id)
 
+    this.central.once('error', this._oncentralconnecterror)
     this.central.connect(peripheral)
+  }
+
+  _oncentralconnecterror(err) {
+    console.log('Central.connect() failed:', err)
+    this._resumeScan()
   }
 
   _oncentralconnect(peripheral) {
     console.log('connected:', peripheral.id, peripheral.name)
+    this.central.off('error', this._oncentralconnecterror)
     this._peripheral = peripheral
 
     const { id } = peripheral
@@ -164,6 +180,8 @@ module.exports = class NearbyPeers extends EventEmitter {
       if (disconnect) this.central.disconnect(peripheral)
 
       peripheral.destroy()
+
+      setTimeout(() => this._resumeScan(), 2000)
     }
 
     peripheral.on('servicesDiscover', (services) => {
@@ -230,13 +248,13 @@ module.exports = class NearbyPeers extends EventEmitter {
     // TODO: move disconnectedAt = Date.now() here if signal stable.
 
     // TODO: this cleanup does not make sense - rework.
+    /*
     if (this._peripheral) {
       console.log('post cleanup', this._peripheral.id)
       this.central.disconnect(this._peripheral)
       this._peripheral = null
     }
-
-    setTimeout(() => this._resumeScan(), 2000)
+    */
   }
 
   destroy() {
