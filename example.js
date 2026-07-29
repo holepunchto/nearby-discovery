@@ -1,11 +1,12 @@
 const NearbyPeers = require('.')
 
 async function main() {
-  const service = new NearbyPeers()
+  using service = new NearbyPeers()
+  service.on('error', console.error)
 
   const key = require('bare-crypto').randomBytes(32)
 
-  console.log('key', key.toString('hex'))
+  console.log('local key', key.toString('hex'))
 
   // init server
   await service.announce(key)
@@ -16,7 +17,6 @@ async function main() {
     console.log('peer resolved', peer)
   })
 
-  service.on('error', console.error)
   service.scan()
   console.log('scanning')
 }

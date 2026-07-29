@@ -37,6 +37,6 @@
   },
   "homepage": "https://github.com/holepunchto/repo-template",
   "dependencies": {
-    "bare-bluetooth": "../bare-bluetooth/"
+    "bare-bluetooth": "^0.2.0"
   }
 }
