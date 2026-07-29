@@ -37,24 +37,19 @@ module.exports = class NearbyPeers extends EventEmitter {
     this.server = new Server()
     this.idchr = new Characteristic(this.charUUID, { read: true }) // BLE-ish for "port".
 
-    this.server.on('stateChange', (blestate) => {
-      console.log('server state', blestate, this.server.state)
-    })
     this.server.on('readRequest', this._onreadrequest.bind(this))
-
-    const done = new Promise((resolve, reject) => {
-      this.server.once('error', reject)
-      this.server.once('serviceAdd', resolve)
-    })
-
-    // l2cap
+    // TODO: l2cap
     // this.server.on('channelPublish', (psm) => {})
     // this.server.on('channelOpen', (channel) => {})
+
+    await serverPowered(this.server)
+
+    const serviceReady = serverServiceAdd(this.server)
 
     this.localService = new Service(this.serviceUUID, [this.idchr])
     this.server.addService(this.localService)
 
-    await done
+    await serviceReady
 
     this.server.on('error', this.emit.bind(this, 'error'))
 
@@ -294,4 +289,48 @@ function spawnPeer() {
     error: null,
     peripheral: null
   }
+}
+
+async function serverPowered(server) {
+  if (server.state === 'poweredOn') return
+
+  return new Promise((resolve, reject) => {
+    if (server.state === 'poweredOn') return resolve()
+
+    function onstate(state) {
+      console.log('server state', state)
+      if (state === 'poweredOn') {
+        server.off('stateChange', onstate)
+        server.off('error', onerror)
+        resolve()
+      }
+    }
+
+    function onerror(error) {
+      server.off('stateChange', onstate)
+      reject(error)
+    }
+
+    server.once('error', onerror)
+    server.on('stateChange', onstate)
+  })
+}
+
+async function serverServiceAdd(server) {
+  return new Promise((resolve, reject) => {
+    function onserviceadd() {
+      console.log('serviceAdd')
+
+      server.off('error', onerror)
+      resolve()
+    }
+
+    function onerror(error) {
+      server.off('serviceAdd', onserviceadd)
+      reject(error)
+    }
+
+    server.once('error', onerror)
+    server.once('serviceAdd', onserviceadd)
+  })
 }
