@@ -2,18 +2,24 @@ const { Central, Characteristic, Server, Service } = require('bare-bluetooth')
 const EventEmitter = require('bare-events')
 
 const SERVICE_UUID = 'B4A3C8A7-0000-1000-8000-00805F9B34FB'
-const CHAR_UUID = 'B4A3C8A7-0004-1000-8000-00805F9B34FB' // keet-id characteristic
+const CHAR_KEY_UUID = 'B4A3C8A7-0004-1000-8000-00805F9B34FB' // key characteristic
+const CHAR_STREAM_UUID = 'B4A3C8A7-0005-1000-8000-00805F9B34FB' // l2cap stream characteristic
 
 const isAndroid = Bare.platform === 'android'
 const scanOptions = isAndroid ? { scanMode: Central.SCAN_MODE_LOW_LATENCY } : undefined
 
 module.exports = class NearbyPeers extends EventEmitter {
-  constructor({ serviceUUID = SERVICE_UUID, charUUID = CHAR_UUID } = {}) {
+  constructor({
+    serviceUUID = SERVICE_UUID,
+    charUUID = CHAR_KEY_UUID,
+    streamUUID = CHAR_STREAM_UUID
+  } = {}) {
     super()
     this._localKey = null
     this._localName = null
     this.serviceUUID = serviceUUID
     this.charUUID = charUUID
+    this.streamUUID = streamUUID
 
     this.central = new Central()
     this.central.on('discover', this._oncentraldiscover.bind(this))
@@ -21,13 +27,18 @@ module.exports = class NearbyPeers extends EventEmitter {
     this.central.on('disconnect', this._oncentraldisconnect.bind(this))
     this.central.on('error', this.emit.bind(this, 'error'))
 
-    this.scanning = false
-    this.discovered = new Map()
-    this._peripheral = null
+    this.discovered = new Map() // TODO: use 'xache', timeout: 0, size: 15
+    this._scanTimeout = null
+    this._flushTimeout = null
+    this.discovering = false
+    this._scanning = false
+    this._connecting = false
+    this._candidates = []
 
     this.announcing = false
     this.server = null
-    this.idchr = null
+    this.chrKey = null
+    this.chrStream = null
     this.localService = null
 
     this._oncentralconnecterror = this._oncentralconnecterror.bind(this)
@@ -35,25 +46,29 @@ module.exports = class NearbyPeers extends EventEmitter {
 
   async _initServer() {
     this.server = new Server()
-    this.idchr = new Characteristic(this.charUUID, { read: true }) // BLE-ish for "port".
+    this.chrKey = new Characteristic(this.charUUID, { read: true }) // BLE-ish for "port".
 
     this.server.on('readRequest', this._onreadrequest.bind(this))
-    // TODO: l2cap
-    // this.server.on('channelPublish', (psm) => {})
-    // this.server.on('channelOpen', (channel) => {})
+
+    if (this.useStream) {
+      this.chrStream = new Characteristic(this.streamUUID, { read: true })
+      // TODO: l2cap
+      // this.server.on('channelPublish', (psm) => {})
+      // this.server.on('channelOpen', (channel) => {})
+    }
 
     await serverPowered(this.server)
 
     const serviceReady = serverServiceAdd(this.server)
 
-    this.localService = new Service(this.serviceUUID, [this.idchr])
+    this.localService = new Service(this.serviceUUID, [this.chrKey])
     this.server.addService(this.localService)
 
     await serviceReady
 
     this.server.on('error', this.emit.bind(this, 'error'))
 
-    this.server.updateValue(this.idchr, this._localKey)
+    this.server.updateValue(this.chrKey, this._localKey)
     this.server.startAdvertising({
       serviceUUIDs: [this.serviceUUID],
       name: this._localName
@@ -62,7 +77,7 @@ module.exports = class NearbyPeers extends EventEmitter {
 
   async announce(id, { deviceName = 'keet-nearby' } = {}) {
     this._localName = deviceName
-    this._localKey = id // TODO: normalize
+    this._localKey = id // TODO normalize to buffer < 512
     if (this.announcing) return
 
     this.announcing = true
@@ -73,33 +88,64 @@ module.exports = class NearbyPeers extends EventEmitter {
       this.announcing = false
       throw err
     }
-
-    this.announcing = true
   }
 
   _onreadrequest(req) {
+    // TODO switch(req.characteristicUuid) { ... } incl. L2Cap
+    // maybe export dynamic `this.share(cuid, value)` & `this.unshare(cuid)`
+    // (ez/friendly api for arbitrary decentralized broacast value)
+
     console.log('_onreadrequest', req)
+
     const value = this._localKey
     this.server.respondToRequest(req, Server.ATT_SUCCESS, value)
   }
 
-  scan() {
-    if (this.scanning) return
-    this.scanning = true
-    // this.scanTimeout = setTimeout(this.stopScan.bind(this), 20_000)
-    console.log('starting scan')
-    this._resumeScan()
+  discover({ timeout = 0 } = {}) {
+    this.discovering = true
+    this._scan(timeout)
   }
 
-  _resumeScan() {
-    this.central.startScan([this.serviceUUID], scanOptions)
+  stopDiscover() {
+    this.discovering = false
+    this._stopScan()
+  }
+
+  _scan(timeout) {
+    if (this._scanning) return
     this._scanning = true
+
+    // power saving
+    if (timeout > 0) {
+      if (this._scanTimeout) clearTimeout(this._scanTimeout)
+      this._scanTimeout = setTimeout(() => {
+        console.info('scanTimeout: stopping scan')
+        this._stopScan()
+      }, timeout)
+    }
+
+    console.info('scan started')
+    this.central.startScan([this.serviceUUID], scanOptions)
   }
 
-  _pauseScan() {
+  _stopScan() {
     if (!this._scanning) return
+
+    if (this._scanTimeout) clearTimeout(this._scanTimeout)
+    this._scanTimeout = null
+
     this._scanning = false
-    this.central.stopScan()
+
+    try {
+      this.central.stopScan()
+    } catch (err) {
+      // state mismatch in external system-service
+      if (err.message !== 'No discovery started') {
+        throw err
+      }
+    }
+
+    console.info('scan stopped')
   }
 
   _oncentraldiscover(discoveredPeripheral) {
@@ -122,20 +168,83 @@ module.exports = class NearbyPeers extends EventEmitter {
 
     console.log('discovered:', peripheral.id, peripheral.name, peripheral.rssi)
 
-    if (!this.scanning) return // TODO: bluez cache bug
     if (peer.key) return
     if (peer.ignore) return
-    if (this._peripheral) return  // TODO: proper connect queue
 
-    this._connect(peripheral.id)
+    this._queueConnect(peripheral.id)
+  }
+
+  _queueConnect(id) {
+    if (this._connecting) return
+
+    this._candidates.push(id)
+
+    if (this._flushTimeout) clearTimeout(this._flushTimeout)
+    this._flushTimeout = setTimeout(
+      this._flush.bind(this),
+      2000 /* todo. halve after each discover. */
+    )
+  }
+
+  _flush() {
+    if (this._connecting) return
+
+    if (this._flushTimeout) clearTimeout(this._flushTimeout)
+    this._flushTimeout = null
+
+    const candidates = this._candidates
+    this._candidates = [] // expect fresh rssi on next _scan()
+
+    // pick strongest signal
+    candidates.sort((ida, idb) => {
+      const a = this.discovered.get(ida)
+      const b = this.discovered.get(idb)
+
+      if (!a && !b) return 0
+      if (!a) return 1
+      if (!b) return -1
+
+      const sa = a.rssi ?? -100
+      const sb = b.rssi ?? -100
+
+      return sb - sa
+    })
+
+    let id = null
+
+    for (const candidate of candidates) {
+      const peer = this.discovered.get(candidate)
+      if (!peer) continue
+      if (peer.key) continue
+      if (peer.ignore) continue
+
+      id = candidate
+      break
+    }
+
+    if (id) {
+      this._connect(id)
+    } else if (this.discovering) {
+      this._scan(/* TODO missing reduced timeout */)
+    }
   }
 
   _connect(id) {
-    this._pauseScan()
-
     const peer = this.discovered.get(id)
+    if (!peer) throw new Error('unknown peer')
+
     const { peripheral } = peer
     if (!peripheral) throw new Error('unknown peripheral')
+
+    if (this._connecting) throw new Error('unreachable')
+    this._connecting = true
+
+    try {
+      this._stopScan()
+    } catch (err) {
+      this._oncentralconnecterror(err)
+      return
+    }
 
     peer.connectedAt = Date.now()
     peer.attempts++
@@ -147,13 +256,13 @@ module.exports = class NearbyPeers extends EventEmitter {
 
   _oncentralconnecterror(err) {
     console.log('Central.connect() failed:', err)
-    this._resumeScan()
+    this._connecting = false
+    if (this.discovering) this._scan() // resume
   }
 
   _oncentralconnect(peripheral) {
     console.log('connected:', peripheral.id, peripheral.name)
     this.central.off('error', this._oncentralconnecterror)
-    this._peripheral = peripheral
 
     const { id } = peripheral
 
@@ -165,7 +274,7 @@ module.exports = class NearbyPeers extends EventEmitter {
       if (finished) return
       finished = true
 
-      this._peripheral = null
+      this._connecting = false
 
       const peer = this.discovered.get(id)
       peer.ignore ||= ban
@@ -178,7 +287,9 @@ module.exports = class NearbyPeers extends EventEmitter {
 
       peripheral.destroy()
 
-      setTimeout(() => this._resumeScan(), 2000)
+      if (this.discovering) {
+        this._scan() // resume
+      }
     }
 
     peripheral.on('servicesDiscover', (services) => {
@@ -242,21 +353,15 @@ module.exports = class NearbyPeers extends EventEmitter {
 
   _oncentraldisconnect(peripheral) {
     console.log('_oncentraldisconnect()', peripheral.id)
+    this._connecting = false
     // TODO: move disconnectedAt = Date.now() here if signal stable.
-
-    // TODO: this cleanup does not make sense - rework.
-    /*
-    if (this._peripheral) {
-      console.log('post cleanup', this._peripheral.id)
-      this.central.disconnect(this._peripheral)
-      this._peripheral = null
-    }
-    */
   }
 
   destroy() {
     // TODO: destroy open peripherals?
     this.central.destroy()
+    if (this._scanTimeout) clearTimeout(this._scanTimeout)
+    if (this._flushTimeout) clearTimeout(this._flushTimeout)
   }
 
   [Symbol.dispose]() {

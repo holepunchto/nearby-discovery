@@ -1,7 +1,7 @@
 {
-  "name": "@holepunchto/keet-nearby",
+  "name": "@holepunchto/nearby-discovery",
   "version": "0.0.1",
-  "description": "dials nearby peers over BLE",
+  "description": "discover peers over BLE",
   "main": "index.js",
   "exports": {
     "./package": "./package.json",

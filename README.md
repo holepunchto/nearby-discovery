@@ -1,6 +1,6 @@
-# keet-nearby
+# nearby-discovery
 
-discovery of nearby peers
+Discover nearby values and peers
 
 ## Usage
 
@@ -22,17 +22,15 @@ service.on('discovered', peer => {
 })
 
 service.on('error', console.error)
-service.scan()
+service.discover()
 ```
-
 
 ## API
 
-Don't run this module on your main thread as some underlying calls might
-be blocking depending on platform.
+Some underlying calls might be blocking depending on platform,
+(don't run this module on main thread).
 
 Use a worker thread in production.
-
 
 ### `const service = new Nearby(opts = {})`
 
@@ -48,14 +46,16 @@ Initializes BLE server and begins announcing local service+characteristic; Requi
 
 ### `service.on('discovered', peer)`
 
-Fired after `service.scan()` on successful key transfer.
+Fired after `service.discover()` on successful key transfer.
 
 _main_
+
 - `peer.key` `Buffer` - the remote peer's announced key.
 - `peer.address` `string`- Bluetooth device address
 - `peer.deviceName` `string` - the remote device's advertised name.
 
 _details_
+
 - `peer.address` `string` - remote address
 - `peer.rssi` `number` - signal strength
 - `peer.connectedAt` `number|null`
@@ -63,10 +63,21 @@ _details_
 - `peer.seenDate` `number`
 - `peer.seenCount` `number`
 
+### `service.discover(opts = {})`
+
+Starts scanning for nearby peers, connects to matching devices, and reads their key characteristic.
+
+- `opts.timeout` `number` - optional scan timeout in milliseconds; default: `0` disables the timeout.
+
+### `service.stopDiscover()`
+
+Stops active discovery/scanning.
+
 ## TODO
+
 - rename repo to `nearby-discovery` with 2 modes of operation:
- - GATT `key` discovery
- - L2Cap `stream` exposed as `peer.stream` + `connection` event. (support missing, `bare-bluetooth-linux`)
+- GATT `key` discovery
+- L2Cap `stream` exposed as `peer.stream` + `connection` event. (support missing, `bare-bluetooth-linux`)
 
 ## License
 
