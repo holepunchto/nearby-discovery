@@ -13,12 +13,12 @@ async function main() {
   console.log('listening')
 
   // scan client
-  service.on('discovered', peer => {
+  service.on('discovered', (peer) => {
     console.log('peer resolved', peer)
   })
 
-  service.scan()
-  console.log('scanning')
+  service.discover()
+  console.log('discovering')
 }
 
 main()
