@@ -4,7 +4,7 @@ Discover nearby values and peers
 
 ## Usage
 
-```
+```js
 const Nearby = require('nearby-discovery')
 
 using service = new Nearby()
