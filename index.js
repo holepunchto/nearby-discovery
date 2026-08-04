@@ -1,4 +1,3 @@
-const FramedStream = require('framed-stream')
 const { Central, Characteristic, Server, Service } = require('bare-bluetooth')
 const EventEmitter = require('bare-events')
 
@@ -85,7 +84,7 @@ module.exports = class NearbyPeers extends EventEmitter {
     })
   }
 
-  async announce(id, { deviceName = 'keet-nearby' } = {}) {
+  async announce(id, { deviceName = 'peer' } = {}) {
     this._localName = deviceName
     this._localKey = id // TODO normalize to buffer < 512
     if (this.announcing) return
@@ -383,12 +382,11 @@ module.exports = class NearbyPeers extends EventEmitter {
 
     peripheral.on('channelOpen', (channel) => {
       console.info('_onchannelopen (outgoing)')
-      const stream = new FramedStream(channel)
 
       // TODO: blocks further discovery/connects.
-      stream.on('close', () => finish(true))
+      channel.on('close', () => finish(true))
 
-      this.emit('stream', stream, { initiator: true, channel, address: peripheral.id })
+      this.emit('stream', channel, { initiator: true, address: peripheral.id })
     })
 
     peripheral.on('disconnect', () => {
@@ -414,11 +412,10 @@ module.exports = class NearbyPeers extends EventEmitter {
 
   _onchannelopen(channel) {
     console.info('_onchannelopen (incoming)')
-    const stream = new FramedStream(channel)
     // TODO: deny duplicate streams
     // either deduce remote BLE-addr from channel
     // or require a handshake.
-    this.emit('stream', stream, { initiator: false, channel, address: null })
+    this.emit('stream', channel, { initiator: false, address: null })
   }
 
   destroy() {
