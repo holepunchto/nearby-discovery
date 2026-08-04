@@ -177,13 +177,14 @@ module.exports = class NearbyPeers extends EventEmitter {
   _queueConnect(id) {
     if (this._connecting) return
 
-    this._candidates.push(id)
+    if (!this._candidates.includes(id)) this._candidates.push(id)
 
-    if (this._flushTimeout) clearTimeout(this._flushTimeout)
-    this._flushTimeout = setTimeout(
-      this._flush.bind(this),
-      2000 /* todo. halve after each discover. */
-    )
+    if (this._flushTimeout) return
+
+    this._flushTimeout = setTimeout(() => {
+      this._flushTimeout = null
+      this._flush()
+    }, 2000 /* todo. halve after each discover. */)
   }
 
   _flush() {
