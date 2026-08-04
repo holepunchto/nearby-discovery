@@ -5,6 +5,7 @@ const Xache = require('xache')
 const SERVICE_UUID = 'B4A3C8A7-0000-1000-8000-00805F9B34FB'
 const CHAR_KEY_UUID = 'B4A3C8A7-0004-1000-8000-00805F9B34FB' // key characteristic
 const CHAR_STREAM_UUID = 'B4A3C8A7-0005-1000-8000-00805F9B34FB' // l2cap stream characteristic
+const DEFAULT_FLUSH_DELAY = 2000
 
 const isAndroid = Bare.platform === 'android'
 const scanOptions = isAndroid ? { scanMode: Central.SCAN_MODE_LOW_LATENCY } : undefined
@@ -15,7 +16,8 @@ module.exports = class NearbyPeers extends EventEmitter {
     serviceUUID = SERVICE_UUID,
     charUUID = CHAR_KEY_UUID,
     streamUUID = CHAR_STREAM_UUID,
-    peerCache = {}
+    peerCache = {},
+    flushDelay = DEFAULT_FLUSH_DELAY
   } = {}) {
     super()
     this._localKey = null
@@ -34,6 +36,8 @@ module.exports = class NearbyPeers extends EventEmitter {
     this.discovered = new Xache({ maxAge, maxSize })
     this._scanTimeout = null
     this._flushTimeout = null
+    this._initialFlushDelay = flushDelay
+    this._flushDelay = flushDelay
     this.discovering = false
     this._scanning = false
     this._connecting = false
@@ -149,6 +153,7 @@ module.exports = class NearbyPeers extends EventEmitter {
   _scan(timeout) {
     if (this._scanning) return
     this._scanning = true
+    this._flushDelay = this._initialFlushDelay
 
     // power saving
     if (timeout > 0) {
@@ -215,10 +220,18 @@ module.exports = class NearbyPeers extends EventEmitter {
     this._candidates.push(id)
 
     if (this._flushTimeout) clearTimeout(this._flushTimeout)
-    this._flushTimeout = setTimeout(
-      this._flush.bind(this),
-      2000 /* todo. halve after each discover. */
-    )
+    this._flushTimeout = null
+
+    if (this._flushDelay < 100) {
+      this._flush()
+    } else {
+      this._flushTimeout = setTimeout(
+        this._flush.bind(this),
+        this._flushDelay
+      )
+    }
+
+    this._flushDelay /= 2
   }
 
   _flush() {
