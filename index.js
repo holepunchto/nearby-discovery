@@ -1,5 +1,6 @@
 const { Central, Characteristic, Server, Service } = require('bare-bluetooth')
 const EventEmitter = require('bare-events')
+const Xache = require('xache')
 
 const SERVICE_UUID = 'B4A3C8A7-0000-1000-8000-00805F9B34FB'
 const CHAR_KEY_UUID = 'B4A3C8A7-0004-1000-8000-00805F9B34FB' // key characteristic
@@ -13,7 +14,8 @@ module.exports = class NearbyPeers extends EventEmitter {
     useStream = false,
     serviceUUID = SERVICE_UUID,
     charUUID = CHAR_KEY_UUID,
-    streamUUID = CHAR_STREAM_UUID
+    streamUUID = CHAR_STREAM_UUID,
+    peerCache = {}
   } = {}) {
     super()
     this._localKey = null
@@ -28,7 +30,8 @@ module.exports = class NearbyPeers extends EventEmitter {
     this.central.on('disconnect', this._oncentraldisconnect.bind(this))
     this.central.on('error', this.emit.bind(this, 'error'))
 
-    this.discovered = new Map() // TODO: use 'xache', timeout: 0, size: 15
+    const { maxAge = 0, maxSize = 20 } = peerCache
+    this.discovered = new Xache({ maxAge, maxSize })
     this._scanTimeout = null
     this._flushTimeout = null
     this.discovering = false
@@ -82,7 +85,11 @@ module.exports = class NearbyPeers extends EventEmitter {
     }
 
     this.server.on('error', this.emit.bind(this, 'error'))
-    this.server.updateValue(this.chrKey, this._localKey) // TODO: redundant?
+
+    // TODO: updateValue should transfer the value to BLE stack
+    // for passive responses;
+    // not sure if readRequest handler disables passive responses
+    this.server.updateValue(this.chrKey, this._localKey)
     this.server.startAdvertising({
       serviceUUIDs: [this.serviceUUID],
       name: this._localName

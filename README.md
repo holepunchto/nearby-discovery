@@ -56,6 +56,7 @@ Use a worker thread in production.
 - `opts.serviceUUID` `string` - BLE service UUID to announce/search for
 - `opts.charUUID` `string` - Key BLE characteristic
 - `opts.streamUUID` Stream BLE characteristic
+- `opts.peerCache` Upper bound of discovered peers, default `{ maxAge: 0, maxSize: 20 }`
 
 ### `await service.announce(key, opts = {})`
 
