@@ -45,11 +45,13 @@ module.exports = class NearbyPeers extends EventEmitter {
     this._useStream = useStream
 
     this._oncentralconnecterror = this._oncentralconnecterror.bind(this)
+    this._debug = this.emit.bind(this, 'debug')
   }
 
   async _initServer() {
     this.server = new Server()
     this.server.on('readRequest', this._onreadrequest.bind(this))
+    this.server.on('stateChange', (state) => this._debug('stateChange', state))
 
     this.chrKey = new Characteristic(this.charUUID, { read: true })
 
@@ -70,9 +72,12 @@ module.exports = class NearbyPeers extends EventEmitter {
     this.server.addService(this.localService)
 
     await serviceReady
+    this._debug('serviceAdd')
 
     if (this._useStream) {
       this._psm = await publishChannel(this.server)
+      this._debug('channel published, psm:', this._psm)
+
       this.server.updateValue(this.chrStream, Buffer.from(String(this._psm))) // TODO: redundant?
     }
 
@@ -100,7 +105,7 @@ module.exports = class NearbyPeers extends EventEmitter {
   }
 
   _onreadrequest(req) {
-    console.log('_onreadrequest', req, req.offset)
+    this._debug('_onreadrequest', req, req.offset)
 
     let value = null
 
@@ -142,12 +147,12 @@ module.exports = class NearbyPeers extends EventEmitter {
     if (timeout > 0) {
       if (this._scanTimeout) clearTimeout(this._scanTimeout)
       this._scanTimeout = setTimeout(() => {
-        console.info('scanTimeout: stopping scan')
+        this._debug('scanTimeout: stopping scan')
         this._stopScan()
       }, timeout)
     }
 
-    console.info('scan started')
+    this._debug('scan started')
     this.central.startScan([this.serviceUUID], scanOptions)
   }
 
@@ -168,7 +173,7 @@ module.exports = class NearbyPeers extends EventEmitter {
       }
     }
 
-    console.info('scan stopped')
+    this._debug('scan stopped')
   }
 
   _oncentraldiscover(discoveredPeripheral) {
@@ -189,7 +194,7 @@ module.exports = class NearbyPeers extends EventEmitter {
 
     this.discovered.set(peripheral.id, peer)
 
-    console.log('discovered:', peripheral.id, peripheral.name, peripheral.rssi)
+    this._debug('discovered:', peripheral.id, peripheral.name, peripheral.rssi)
 
     if (peer.key) return
     if (peer.ignore) return
@@ -271,20 +276,20 @@ module.exports = class NearbyPeers extends EventEmitter {
 
     peer.connectedAt = Date.now()
     peer.attempts++
-    console.log('connect:', peripheral.id)
+    this._debug('connect:', peripheral.id)
 
     this.central.once('error', this._oncentralconnecterror)
     this.central.connect(peripheral)
   }
 
   _oncentralconnecterror(err) {
-    console.log('Central.connect() failed:', err)
+    this._debug('Central.connect() failed:', err)
     this._connecting = false
     if (this.discovering) this._scan() // resume
   }
 
   _oncentralconnect(peripheral) {
-    console.log('connected:', peripheral.id, peripheral.name)
+    this._debug('connected:', peripheral.id, peripheral.name)
     this.central.off('error', this._oncentralconnecterror)
 
     const { id } = peripheral
@@ -292,7 +297,7 @@ module.exports = class NearbyPeers extends EventEmitter {
     let finished = false
 
     const finish = (disconnect = false, ban = false, error = null) => {
-      console.log('finish()', finished, disconnect, ban, error)
+      this._debug('finish()', finished, disconnect, ban, error)
 
       if (finished) return
       finished = true
@@ -316,7 +321,7 @@ module.exports = class NearbyPeers extends EventEmitter {
     }
 
     peripheral.on('servicesDiscover', (services) => {
-      console.log('servicesDiscover:', services.map((service) => service.uuid).join(', '))
+      this._debug('servicesDiscover:', services.map((service) => service.uuid).join(', '))
 
       if (!services?.length) return // TODO: bug bare-bluetooth/lib/linux.js
 
@@ -330,12 +335,12 @@ module.exports = class NearbyPeers extends EventEmitter {
         }
       }
 
-      console.error('service not found:', this.serviceUUID)
+      this._debug('service not found:', this.serviceUUID)
       finish(true, true, 'characteristic not found')
     })
 
     peripheral.on('characteristicsDiscover', (service, characteristics) => {
-      console.log('characteristicsDiscover:', characteristics.map((char) => char.uuid).join(', '))
+      this._debug('characteristicsDiscover:', characteristics.map((char) => char.uuid).join(', '))
 
       if (!characteristics?.length) return // TODO: bug bare-bluetooth/lib/linux.js
 
@@ -358,15 +363,15 @@ module.exports = class NearbyPeers extends EventEmitter {
       } else if (idChar) {
         peripheral.read(idChar)
       } else {
-        console.error('characteristic not found:', this.charUUID)
+        this._debug('characteristic not found:', this.charUUID)
         finish(true, true, 'characteristic not found')
       }
     })
 
     peripheral.on('read', (characteristic, data) => {
       if (sameUUID(characteristic.uuid, this.charUUID)) {
-        console.log('read:', characteristic.uuid)
-        console.log('key', Buffer.from(data).toString('hex'))
+        this._debug('read:', characteristic.uuid)
+        this._debug('key', Buffer.from(data).toString('hex'))
 
         const peer = this.discovered.get(id)
         peer.key = data
@@ -381,7 +386,7 @@ module.exports = class NearbyPeers extends EventEmitter {
     })
 
     peripheral.on('channelOpen', (channel) => {
-      console.info('_onchannelopen (outgoing)')
+      this._debug('_onchannelopen (outgoing)')
 
       // TODO: blocks further discovery/connects.
       channel.on('close', () => finish(true))
@@ -390,14 +395,14 @@ module.exports = class NearbyPeers extends EventEmitter {
     })
 
     peripheral.on('disconnect', () => {
-      console.log('peripheral disconnect')
+      this._debug('peripheral disconnect')
       this.discovered.get(id).disconnectedAt = Date.now()
 
       finish(null) // TODO: determine behavior across platforms
     })
 
     peripheral.on('error', (err) => {
-      console.error('peripheral error:', err)
+      this._debug('peripheral error:', err)
       this.emit('error', err) // unsure if should hoist
       finish(true, false, err)
     })
@@ -406,12 +411,12 @@ module.exports = class NearbyPeers extends EventEmitter {
   }
 
   _oncentraldisconnect(peripheral) {
-    console.log('_oncentraldisconnect()', peripheral.id)
+    this._debug('_oncentraldisconnect()', peripheral.id)
     this._connecting = false
   }
 
   _onchannelopen(channel) {
-    console.info('_onchannelopen (incoming)')
+    this._debug('_onchannelopen (incoming)')
     // TODO: deny duplicate streams
     // either deduce remote BLE-addr from channel
     // or require a handshake.
@@ -465,7 +470,6 @@ async function serverPowered(server) {
     if (server.state === 'poweredOn') return resolve()
 
     function onstate(state) {
-      console.log('server state', state)
       if (state === 'poweredOn') {
         server.off('stateChange', onstate)
         server.off('error', onerror)
@@ -486,8 +490,6 @@ async function serverPowered(server) {
 async function serverServiceAdd(server) {
   return new Promise((resolve, reject) => {
     function onserviceadd() {
-      console.log('serviceAdd')
-
       server.off('error', onerror)
       resolve()
     }
@@ -505,8 +507,6 @@ async function serverServiceAdd(server) {
 async function publishChannel(server) {
   return new Promise((resolve, reject) => {
     function onchannelpublish(psm) {
-      console.info('channel published, psm:', psm)
-
       server.off('error', onerror)
       resolve(psm)
     }
