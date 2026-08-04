@@ -225,10 +225,7 @@ module.exports = class NearbyPeers extends EventEmitter {
     if (this._flushDelay < 100) {
       this._flush()
     } else {
-      this._flushTimeout = setTimeout(
-        this._flush.bind(this),
-        this._flushDelay
-      )
+      this._flushTimeout = setTimeout(this._flush.bind(this), this._flushDelay)
     }
 
     this._flushDelay /= 2
