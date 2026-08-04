@@ -10,6 +10,7 @@ const scanOptions = isAndroid ? { scanMode: Central.SCAN_MODE_LOW_LATENCY } : un
 
 module.exports = class NearbyPeers extends EventEmitter {
   constructor({
+    useStream = false,
     serviceUUID = SERVICE_UUID,
     charUUID = CHAR_KEY_UUID,
     streamUUID = CHAR_STREAM_UUID
@@ -39,43 +40,51 @@ module.exports = class NearbyPeers extends EventEmitter {
     this.server = null
     this.chrKey = null
     this.chrStream = null
+    this._psm = null
     this.localService = null
+    this._useStream = useStream
 
     this._oncentralconnecterror = this._oncentralconnecterror.bind(this)
   }
 
   async _initServer() {
     this.server = new Server()
-    this.chrKey = new Characteristic(this.charUUID, { read: true }) // BLE-ish for "port".
-
     this.server.on('readRequest', this._onreadrequest.bind(this))
 
-    if (this.useStream) {
+    this.chrKey = new Characteristic(this.charUUID, { read: true })
+
+    const chars = [this.chrKey]
+
+    if (this._useStream) {
       this.chrStream = new Characteristic(this.streamUUID, { read: true })
-      // TODO: l2cap
-      // this.server.on('channelPublish', (psm) => {})
-      // this.server.on('channelOpen', (channel) => {})
+      chars.push(this.chrStream)
+
+      this.server.on('channelOpen', this._onchannelopen.bind(this))
     }
 
     await serverPowered(this.server)
 
     const serviceReady = serverServiceAdd(this.server)
 
-    this.localService = new Service(this.serviceUUID, [this.chrKey])
+    this.localService = new Service(this.serviceUUID, chars)
     this.server.addService(this.localService)
 
     await serviceReady
 
-    this.server.on('error', this.emit.bind(this, 'error'))
+    if (this._useStream) {
+      this._psm = await publishChannel(this.server)
+      this.server.updateValue(this.chrStream, Buffer.from(String(this._psm))) // TODO: redundant?
+    }
 
-    this.server.updateValue(this.chrKey, this._localKey)
+    this.server.on('error', this.emit.bind(this, 'error'))
+    this.server.updateValue(this.chrKey, this._localKey) // TODO: redundant?
     this.server.startAdvertising({
       serviceUUIDs: [this.serviceUUID],
       name: this._localName
     })
   }
 
-  async announce(id, { deviceName = 'keet-nearby' } = {}) {
+  async announce(id, { deviceName = 'peer' } = {}) {
     this._localName = deviceName
     this._localKey = id // TODO normalize to buffer < 512
     if (this.announcing) return
@@ -91,14 +100,28 @@ module.exports = class NearbyPeers extends EventEmitter {
   }
 
   _onreadrequest(req) {
-    // TODO switch(req.characteristicUuid) { ... } incl. L2Cap
-    // maybe export dynamic `this.share(cuid, value)` & `this.unshare(cuid)`
-    // (ez/friendly api for arbitrary decentralized broacast value)
+    console.log('_onreadrequest', req, req.offset)
 
-    console.log('_onreadrequest', req)
+    let value = null
 
-    const value = this._localKey
-    this.server.respondToRequest(req, Server.ATT_SUCCESS, value)
+    switch (normalizeUUID(req.characteristicUuid)) {
+      case normalizeUUID(this.charUUID):
+        if (req.offset > this._localKey.length) {
+          this.server.respondToRequest(req, Server.ATT_UNLIKELY_ERROR)
+        } else {
+          const value = this._localKey.subarray(req.offset)
+          this.server.respondToRequest(req, Server.ATT_SUCCESS, value)
+        }
+        break
+
+      case normalizeUUID(this.streamUUID):
+        value = this._psm === null ? Buffer.alloc(0) : Buffer.from(String(this._psm))
+        this.server.respondToRequest(req, Server.ATT_SUCCESS, value)
+        break
+
+      default:
+        this.server.respondToRequest(req, Server.ATT_INVALID_HANDLE)
+    }
   }
 
   discover({ timeout = 0 } = {}) {
@@ -299,7 +322,10 @@ module.exports = class NearbyPeers extends EventEmitter {
 
       for (const service of services) {
         if (sameUUID(service.uuid, this.serviceUUID)) {
-          peripheral.discoverCharacteristics(service, [this.charUUID])
+          const filter = [this.charUUID]
+          if (this._useStream) filter.push(this.streamUUID)
+
+          peripheral.discoverCharacteristics(service, filter)
           return
         }
       }
@@ -313,33 +339,61 @@ module.exports = class NearbyPeers extends EventEmitter {
 
       if (!characteristics?.length) return // TODO: bug bare-bluetooth/lib/linux.js
 
+      let idChar = null
+      let streamChar = null
       for (const characteristic of characteristics) {
-        if (sameUUID(characteristic.uuid, this.charUUID)) {
-          peripheral.read(characteristic)
-          return
+        switch (normalizeUUID(characteristic.uuid)) {
+          case normalizeUUID(this.charUUID):
+            idChar = characteristic
+            break
+
+          case normalizeUUID(this.streamUUID):
+            streamChar = characteristic
+            break
         }
       }
 
-      console.error('characteristic not found:', this.charUUID)
-      finish(true, true, 'characteristic not found')
+      if (this._useStream && streamChar) {
+        peripheral.read(streamChar)
+      } else if (idChar) {
+        peripheral.read(idChar)
+      } else {
+        console.error('characteristic not found:', this.charUUID)
+        finish(true, true, 'characteristic not found')
+      }
     })
 
     peripheral.on('read', (characteristic, data) => {
-      console.log('read:', characteristic.uuid)
-      console.log('key', Buffer.from(data).toString('hex'))
+      if (sameUUID(characteristic.uuid, this.charUUID)) {
+        console.log('read:', characteristic.uuid)
+        console.log('key', Buffer.from(data).toString('hex'))
 
-      const peer = this.discovered.get(id)
-      peer.key = data
+        const peer = this.discovered.get(id)
+        peer.key = data
 
-      finish(true)
-      this.emit('discovered', peer)
+        finish(true)
+        this.emit('discovered', peer)
+      } else if (sameUUID(characteristic.uuid, this.streamUUID)) {
+        const psm = parseInt(Buffer.from(data).toString('utf8'))
+        // TODO: deny duplicate streams
+        peripheral.openL2CAPChannel(psm)
+      }
+    })
+
+    peripheral.on('channelOpen', (channel) => {
+      console.info('_onchannelopen (outgoing)')
+
+      // TODO: blocks further discovery/connects.
+      channel.on('close', () => finish(true))
+
+      this.emit('stream', channel, { initiator: true, address: peripheral.id })
     })
 
     peripheral.on('disconnect', () => {
       console.log('peripheral disconnect')
       this.discovered.get(id).disconnectedAt = Date.now()
 
-      finish(null) // TODO: is wrong
+      finish(null) // TODO: determine behavior across platforms
     })
 
     peripheral.on('error', (err) => {
@@ -354,14 +408,22 @@ module.exports = class NearbyPeers extends EventEmitter {
   _oncentraldisconnect(peripheral) {
     console.log('_oncentraldisconnect()', peripheral.id)
     this._connecting = false
-    // TODO: move disconnectedAt = Date.now() here if signal stable.
+  }
+
+  _onchannelopen(channel) {
+    console.info('_onchannelopen (incoming)')
+    // TODO: deny duplicate streams
+    // either deduce remote BLE-addr from channel
+    // or require a handshake.
+    this.emit('stream', channel, { initiator: false, address: null })
   }
 
   destroy() {
-    // TODO: destroy open peripherals?
-    this.central.destroy()
     if (this._scanTimeout) clearTimeout(this._scanTimeout)
     if (this._flushTimeout) clearTimeout(this._flushTimeout)
+    if (this.server) this.server.destroy()
+    this.central.destroy()
+    // TODO: destroy open peripherals?
   }
 
   [Symbol.dispose]() {
@@ -437,5 +499,25 @@ async function serverServiceAdd(server) {
 
     server.once('error', onerror)
     server.once('serviceAdd', onserviceadd)
+  })
+}
+
+async function publishChannel(server) {
+  return new Promise((resolve, reject) => {
+    function onchannelpublish(psm) {
+      console.info('channel published, psm:', psm)
+
+      server.off('error', onerror)
+      resolve(psm)
+    }
+
+    function onerror(err) {
+      server.off('channelPublish', onchannelpublish)
+      reject(err)
+    }
+
+    server.once('error', onerror)
+    server.once('channelPublish', onchannelpublish)
+    server.publishChannel()
   })
 }
