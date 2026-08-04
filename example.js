@@ -1,7 +1,8 @@
-const NearbyPeers = require('.')
+const NearbyDiscovery = require('.')
 
 async function main() {
-  const service = new NearbyPeers()
+  const service = new NearbyDiscovery()
+  service.on('debug', console.info)
   service.on('error', console.error)
 
   const key = require('bare-crypto').randomBytes(32)

@@ -16,7 +16,7 @@ await service.announce(localKey)
 
 // scan & connect to nearby services
 
-service.on('discovered', peer => {
+service.on('discovered', (peer) => {
   const remoteKey = peer.key
   console.log('peer discovered', remoteKey, peer)
 })
