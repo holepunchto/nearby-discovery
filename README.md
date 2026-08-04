@@ -38,8 +38,8 @@ const service = new Nearby({ useStream: true })
 await service.announce(core.key)
 
 service.on('stream', (stream, { initiator }) => {
-    const r = core.replicate(initiator)
-    r.pipe(stream).pipe(r)
+  const r = core.replicate(initiator)
+  r.pipe(stream).pipe(r)
 })
 ```
 
