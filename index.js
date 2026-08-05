@@ -44,7 +44,7 @@ module.exports = class NearbyPeers extends EventEmitter {
     this.discovering = false
     this._scanning = false
     this._connecting = false
-    this._candidates = []
+    this._candidates = new Set()
 
     this.announcing = false
     this.server = null
@@ -220,7 +220,7 @@ module.exports = class NearbyPeers extends EventEmitter {
   _queueConnect(id) {
     if (this._connecting) return
 
-    this._candidates.push(id)
+    this._candidates.add(id)
 
     if (this._flushTimeout) clearTimeout(this._flushTimeout)
     this._flushTimeout = null
@@ -240,8 +240,8 @@ module.exports = class NearbyPeers extends EventEmitter {
     if (this._flushTimeout) clearTimeout(this._flushTimeout)
     this._flushTimeout = null
 
-    const candidates = this._candidates
-    this._candidates = [] // expect fresh rssi on next _scan()
+    const candidates = Array.from(this._candidates)
+    this._candidates = new Set() // expect fresh rssi on next _scan()
 
     // pick strongest signal
     candidates.sort((ida, idb) => {
