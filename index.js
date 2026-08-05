@@ -7,12 +7,6 @@ const CHAR_KEY_UUID = 'B4A3C8A7-0004-1000-8000-00805F9B34FB' // key characterist
 const CHAR_STREAM_UUID = 'B4A3C8A7-0005-1000-8000-00805F9B34FB' // l2cap stream characteristic
 const DEFAULT_FLUSH_DELAY = 2000
 
-const scanOptions = {
-  allowDuplicates: false,
-  scanMode: Central.SCAN_MODE_LOW_LATENCY,
-  callbackType: Central.CALLBACK_TYPE_ALL_MATCHES
-}
-
 module.exports = class NearbyPeers extends EventEmitter {
   constructor({
     useStream = false,
@@ -20,7 +14,8 @@ module.exports = class NearbyPeers extends EventEmitter {
     charUUID = CHAR_KEY_UUID,
     streamUUID = CHAR_STREAM_UUID,
     peerCache = {},
-    flushDelay = DEFAULT_FLUSH_DELAY
+    flushDelay = DEFAULT_FLUSH_DELAY,
+    scanOptions = {}
   } = {}) {
     super()
     this._localKey = null
@@ -28,6 +23,7 @@ module.exports = class NearbyPeers extends EventEmitter {
     this.serviceUUID = serviceUUID
     this.charUUID = charUUID
     this.streamUUID = streamUUID
+    this._scanOptions = scanOptions
 
     this.central = new Central()
     this.central.on('discover', this._oncentraldiscover.bind(this))
@@ -168,7 +164,7 @@ module.exports = class NearbyPeers extends EventEmitter {
     }
 
     this._debug('scan started')
-    this.central.startScan([this.serviceUUID], scanOptions)
+    this.central.startScan([this.serviceUUID], this._scanOptions)
   }
 
   _stopScan() {

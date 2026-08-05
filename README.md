@@ -58,6 +58,7 @@ Use a worker thread in production.
 - `opts.streamUUID` Stream BLE characteristic
 - `opts.peerCache` Upper bound of discovered peers, default `{ maxAge: 0, maxSize: 20 }`
 - `opts.flushDelay` `number` The maximum amount of time to spend scanning before connection attempt, default `2000`
+- `opts.scanOptions` forwarded to `bare-bluetooth` - `Central.startScan(..., scanOptions)`
 
 ### `await service.announce(key, opts = {})`
 
