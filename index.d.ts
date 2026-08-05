@@ -26,6 +26,7 @@ interface NearbyDiscoveryOptions {
   streamUUID?: string
   peerCache?: NearbyDiscoveryPeerCacheOptions
   flushDelay?: number
+  scanOptions?: unknown
 }
 
 interface NearbyDiscoveryPeerCacheOptions {
