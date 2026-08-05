@@ -10,7 +10,7 @@ const DEFAULT_FLUSH_DELAY = 2000
 const scanOptions = {
   allowDuplicates: false,
   scanMode: Central.SCAN_MODE_LOW_LATENCY,
-  callbackType: Central.CALLBACK_TYPE_FIRST_MATCH
+  callbackType: Central.CALLBACK_TYPE_ALL_MATCHES
 }
 
 module.exports = class NearbyPeers extends EventEmitter {
