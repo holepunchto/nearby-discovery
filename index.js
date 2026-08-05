@@ -7,8 +7,11 @@ const CHAR_KEY_UUID = 'B4A3C8A7-0004-1000-8000-00805F9B34FB' // key characterist
 const CHAR_STREAM_UUID = 'B4A3C8A7-0005-1000-8000-00805F9B34FB' // l2cap stream characteristic
 const DEFAULT_FLUSH_DELAY = 2000
 
-const isAndroid = Bare.platform === 'android'
-const scanOptions = isAndroid ? { scanMode: Central.SCAN_MODE_LOW_LATENCY } : undefined
+const scanOptions = {
+  allowDuplicates: false,
+  scanMode: Central.SCAN_MODE_LOW_LATENCY,
+  callbackType: Central.CALLBACK_TYPE_FIRST_MATCH
+}
 
 module.exports = class NearbyPeers extends EventEmitter {
   constructor({
