@@ -60,7 +60,7 @@ interface NearbyDiscoveryStreamInfo {
 }
 
 interface NearbyDiscoveryEventMap extends EventEmitter.EventMap {
-  discovered: [peer: NearbyDiscoveryPeer]
+  peer: [peer: NearbyDiscoveryPeer]
   stream: [channel: L2CAPChannel, info: NearbyDiscoveryStreamInfo]
   error: [error: Error]
 }

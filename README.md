@@ -16,7 +16,7 @@ await service.announce(localKey)
 
 // scan & connect to nearby services
 
-service.on('discovered', (peer) => {
+service.on('peer', (peer) => {
   const remoteKey = peer.key
   console.log('peer discovered', remoteKey, peer)
 })
@@ -67,7 +67,7 @@ Initializes BLE server and begins announcing local service+characteristic; Requi
 - `key` `Buffer` the value to respond with on incoming characteristic connction.
 - `opts.deviceName` `string` short device name announced in beacons; default: `peer`
 
-### `service.on('discovered', peer)`
+### `service.on('peer', peer)`
 
 Fired after `service.discover()` on successful key transfer.
 
