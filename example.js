@@ -14,7 +14,7 @@ async function main() {
   console.log('listening')
 
   // scan client
-  service.on('discovered', (peer) => {
+  service.on('peer', (peer) => {
     console.log('peer resolved', peer)
   })
 

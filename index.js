@@ -393,7 +393,7 @@ module.exports = class NearbyPeers extends EventEmitter {
         peer.key = data
 
         finish(true)
-        this.emit('discovered', peer)
+        this.emit('peer', peer)
       } else if (sameUUID(characteristic.uuid, this.streamUUID)) {
         const psm = parseInt(Buffer.from(data).toString('utf8'))
         // TODO: deny duplicate streams
