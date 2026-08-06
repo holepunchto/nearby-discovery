@@ -31,7 +31,7 @@ module.exports = class NearbyPeers extends EventEmitter {
     this.central.on('disconnect', this._oncentraldisconnect.bind(this))
     this.central.on('error', this.emit.bind(this, 'error'))
 
-    const { maxAge = 0, maxSize = 20 } = peerCache
+    const { maxAge = 0, maxSize = 50 } = peerCache
     this.discovered = new Xache({ maxAge, maxSize })
     this._scanTimeout = null
     this._flushTimeout = null
