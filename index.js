@@ -29,7 +29,7 @@ module.exports = class NearbyPeers extends EventEmitter {
     this.central.on('discover', this._oncentraldiscover.bind(this))
     this.central.on('connect', this._oncentralconnect.bind(this))
     this.central.on('disconnect', this._oncentraldisconnect.bind(this))
-    this.central.on('error', this.emit.bind(this, 'error'))
+    this.central.on('error', this._oncentralerror.bind(this))
 
     const { maxAge = 0, maxSize = 50 } = peerCache
     this.discovered = new Xache({ maxAge, maxSize })
@@ -291,6 +291,7 @@ module.exports = class NearbyPeers extends EventEmitter {
     }
 
     peer.connectedAt = Date.now()
+    peer.disconnectedAt = null
     peer.attempts++
     this._debug('connect:', peripheral.id)
 
@@ -410,25 +411,59 @@ module.exports = class NearbyPeers extends EventEmitter {
       this.emit('stream', channel, { initiator: true, address: peripheral.id })
     })
 
+    // Clean hang-up, ie. our own central.disconnect(). The peer is still there.
     peripheral.on('disconnect', () => {
       this._debug('peripheral disconnect')
-      this.discovered.get(id).disconnectedAt = Date.now()
 
       finish(null) // TODO: determine behavior across platforms
     })
 
     peripheral.on('error', (err) => {
-      this._debug('peripheral error:', err)
-      this.emit('error', err) // unsure if should hoist
-      finish(true, false, err)
+      if (err.code === 'DISCONNECT') {
+        // The link is already gone, so there is nothing to hang up.
+        this._onpeerdisconnect(id)
+        finish(null)
+      } else {
+        this._debug('peripheral error:', err)
+        this.emit('error', err) // unsure if should hoist
+        finish(true, false, err)
+      }
     })
 
     peripheral.discoverServices([this.serviceUUID])
   }
 
+  // `peripheral` is null when the disconnect is for a link we no longer track.
   _oncentraldisconnect(peripheral) {
-    this._debug('_oncentraldisconnect()', peripheral.id)
+    this._debug('_oncentraldisconnect()', peripheral && peripheral.id)
     this._connecting = false
+  }
+
+  _oncentralerror(err) {
+    if (err.code === 'DISCONNECT') {
+      this._onpeerdisconnect(err.id)
+    } else {
+      this.emit('error', err)
+    }
+  }
+
+  // An unexpected disconnect (peer out of range, radio off, app killed) always
+  // carries an error, so bare-bluetooth reports it on the error bus rather than
+  // as a 'disconnect' event. Android raises it on both the peripheral and the
+  // central, so only the first one through announces it.
+  _onpeerdisconnect(id) {
+    this._debug('peer disconnect:', id)
+
+    const peer = id ? this.discovered.get(id) : null
+    if (peer && !peer.disconnectedAt) {
+      peer.disconnectedAt = Date.now()
+      this.emit('peerDisconnect', peer)
+    }
+
+    // Apple never forwards the disconnect to the peripheral, so the connect
+    // flow has no way to release the lock on its own.
+    this._connecting = false
+    if (this.discovering) this._scan() // resume
   }
 
   _onchannelopen(channel) {

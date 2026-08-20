@@ -86,6 +86,10 @@ _details_
 - `peer.seenDate` `number`
 - `peer.seenCount` `number`
 
+### `service.on('peerDisconnect', peer)`
+
+Fired when the link to a peer drops unexpectedly - out of range, radio turned off, or the remote app closed. `peer.disconnectedAt` is set to the time of the drop, and cleared again on the next connect. Not fired when we hang up ourselves after a successful key transfer.
+
 ### `service.discover(opts = {})`
 
 Starts scanning for nearby peers, connects to matching devices, and reads their key characteristic.
