@@ -93,6 +93,10 @@ module.exports = class NearbyPeers extends EventEmitter {
     // for passive responses;
     // not sure if readRequest handler disables passive responses
     this.server.updateValue(this.chrKey, this._localKey)
+    this._startAdvertising()
+  }
+
+  _startAdvertising() {
     this.server.startAdvertising({
       serviceUUIDs: [this.serviceUUID],
       name: this._localName
@@ -106,12 +110,27 @@ module.exports = class NearbyPeers extends EventEmitter {
 
     this.announcing = true
 
+    // resuming after stopAnnounce(), the server is still set up
+    if (this.server) {
+      this.server.updateValue(this.chrKey, this._localKey)
+      this._startAdvertising()
+      return
+    }
+
     try {
       await this._initServer()
     } catch (err) {
       this.announcing = false
       throw err
     }
+  }
+
+  stopAnnounce() {
+    if (!this.announcing) return
+    this.announcing = false
+
+    this.server.stopAdvertising()
+    this._debug('advertising stopped')
   }
 
   _onreadrequest(req) {
