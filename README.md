@@ -1,5 +1,8 @@
 # nearby-discovery
 
+> [!IMPORTANT]
+> This module is experimental. The API is subject to change and may break at any time.
+
 Discover nearby values and peers
 
 ## Usage
