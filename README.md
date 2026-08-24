@@ -69,7 +69,7 @@ Initializes BLE server and begins announcing local service+characteristic; Requi
 
 ### `service.stopAnnounce()`
 
-Stops announcing, so remote peers no longer discover this device. The BLE server stays initialized, so `announce()` resumes it without rebuilding.
+Stops announcing and tears down the BLE server, so remote peers no longer discover this device. Calling `announce()` again rebuilds it from scratch.
 
 Announcing and discovering are independent - `stopDiscover()` does not imply this, and vice versa.
 

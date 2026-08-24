@@ -110,17 +110,14 @@ module.exports = class NearbyPeers extends EventEmitter {
 
     this.announcing = true
 
-    // resuming after stopAnnounce(), the server is still set up
-    if (this.server) {
-      this.server.updateValue(this.chrKey, this._localKey)
-      this._startAdvertising()
-      return
-    }
-
     try {
       await this._initServer()
     } catch (err) {
       this.announcing = false
+      if (this.server) {
+        this.server.destroy()
+        this.server = null
+      }
       throw err
     }
   }
@@ -130,7 +127,9 @@ module.exports = class NearbyPeers extends EventEmitter {
     this.announcing = false
 
     this.server.stopAdvertising()
-    this._debug('advertising stopped')
+    this.server.destroy()
+    this.server = null
+    this._debug('announce stopped')
   }
 
   _onreadrequest(req) {
