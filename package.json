@@ -1,5 +1,5 @@
 {
-  "name": "@holepunchto/nearby-discovery",
+  "name": "nearby-discovery",
   "version": "0.0.1",
   "description": "discover peers over BLE",
   "main": "index.js",
@@ -28,7 +28,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/holepunchto/repo-template.git"
+    "url": "git+https://github.com/holepunchto/repo-template.git"
   },
   "author": "Holepunch Inc",
   "license": "Apache-2.0",
