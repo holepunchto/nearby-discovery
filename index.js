@@ -7,6 +7,12 @@ const CHAR_KEY_UUID = 'B4A3C8A7-0004-1000-8000-00805F9B34FB' // key characterist
 const CHAR_STREAM_UUID = 'B4A3C8A7-0005-1000-8000-00805F9B34FB' // l2cap stream characteristic
 const DEFAULT_FLUSH_DELAY = 2000
 
+const SERVER_STATE = {
+  down: 0,
+  initializing: 1,
+  up: 2
+}
+
 module.exports = class NearbyPeers extends EventEmitter {
   constructor({
     useStream = false,
@@ -44,6 +50,7 @@ module.exports = class NearbyPeers extends EventEmitter {
 
     this.announcing = false
     this.server = null
+    this._serverState = SERVER_STATE.down
     this.chrKey = null
     this.chrStream = null
     this._psm = null
@@ -55,6 +62,7 @@ module.exports = class NearbyPeers extends EventEmitter {
   }
 
   async _initServer() {
+    this._serverState = SERVER_STATE.initializing
     this.server = new Server()
     this.server.on('readRequest', this._onreadrequest.bind(this))
     this.server.on('stateChange', (state) => this._debug('stateChange', state))
@@ -112,23 +120,29 @@ module.exports = class NearbyPeers extends EventEmitter {
 
     try {
       await this._initServer()
+      this._serverState = SERVER_STATE.up
     } catch (err) {
       this.announcing = false
       if (this.server) {
         this.server.destroy()
         this.server = null
       }
+      this._serverState = SERVER_STATE.down
       throw err
     }
   }
 
   stopAnnounce() {
     if (!this.announcing) return
+    if (this._serverState === SERVER_STATE.initializing) {
+      throw new Error('Server startup in progress')
+    }
     this.announcing = false
 
     this.server.stopAdvertising()
     this.server.destroy()
     this.server = null
+    this._serverState = SERVER_STATE.down
     this._debug('announce stopped')
   }
 
@@ -462,6 +476,7 @@ module.exports = class NearbyPeers extends EventEmitter {
     if (this._flushTimeout) clearTimeout(this._flushTimeout)
     if (this.server) this.server.destroy()
     this.central.destroy()
+    this.discovered.destroy()
     // TODO: destroy open peripherals?
   }
 

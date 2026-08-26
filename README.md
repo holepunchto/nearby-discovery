@@ -68,6 +68,7 @@ Initializes BLE server and begins announcing local service+characteristic; Requi
 - `opts.deviceName` `string` short device name announced in beacons; default: `peer`
 
 ### `service.stopAnnounce()`
+_Experimental_
 
 Stops announcing and tears down the BLE server, so remote peers no longer discover this device. Calling `announce()` again rebuilds it from scratch.
 
