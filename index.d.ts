@@ -12,6 +12,7 @@ declare class NearbyDiscovery extends EventEmitter<NearbyDiscoveryEventMap> {
   readonly discovering: boolean
 
   announce(key: Uint8Array, opts?: NearbyDiscoveryAnnounceOptions): Promise<void>
+  stopAnnounce(): void
   discover(opts?: NearbyDiscoveryDiscoverOptions): void
   stopDiscover(): void
   destroy(): void

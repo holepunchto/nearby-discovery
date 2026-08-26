@@ -70,6 +70,13 @@ Initializes BLE server and begins announcing local service+characteristic; Requi
 - `key` `Buffer` the value to respond with on incoming characteristic connction.
 - `opts.deviceName` `string` short device name announced in beacons; default: `peer`
 
+### `service.stopAnnounce()`
+_Experimental_
+
+Stops announcing and tears down the BLE server, so remote peers no longer discover this device. Calling `announce()` again rebuilds it from scratch.
+
+Announcing and discovering are independent - `stopDiscover()` does not imply this, and vice versa.
+
 ### `service.on('peer', peer)`
 
 Fired after `service.discover()` on successful key transfer.
